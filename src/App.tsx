@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
+import {
+  apiFetch,
+  initializeMockSession,
+  logoutMockSession,
+  type AuthUser,
+} from "./api";
 import { GameModal } from "./GameModal";
 import { type GameTier, MoleMark } from "./game-ui";
+import { ProfilePage } from "./ProfilePage";
 
 const payoutMultiplier = 2;
 const previewHoles = Array.from({ length: 9 }, (_, index) => index);
@@ -69,6 +76,10 @@ function GamePreview() {
 export default function App() {
   const [tiers, setTiers] = useState<GameTier[]>([]);
   const [isGameOpen, setIsGameOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+
   useEffect(() => {
     const controller = new AbortController();
     async function loadTiers() {
@@ -87,6 +98,47 @@ export default function App() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    async function startSession() {
+      try {
+        const user = await initializeMockSession();
+        setAuthUser(user);
+
+        const referralCode = new URLSearchParams(window.location.search).get(
+          "ref",
+        );
+        if (referralCode) {
+          await apiFetch("/api/referrals/claim", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ referralCode }),
+          });
+        }
+      } catch {
+        setAuthError("Unable to start the mock development session.");
+      }
+    }
+
+    void startSession();
+  }, []);
+
+  async function handleLogout() {
+    await logoutMockSession();
+    setIsProfileOpen(false);
+    setIsGameOpen(false);
+    setAuthUser(null);
+  }
+
+  if (isProfileOpen && authUser) {
+    return (
+      <ProfilePage
+        user={authUser}
+        onBack={() => setIsProfileOpen(false)}
+        onLogout={() => void handleLogout()}
+      />
+    );
+  }
+
   return (
     <main>
       <nav className="nav container" aria-label="Main navigation">
@@ -96,8 +148,13 @@ export default function App() {
         <a className="nav-link" href="#games">
           Games
         </a>
-        <button className="login-button" type="button">
-          Log in
+        <button
+          className="login-button"
+          type="button"
+          disabled={!authUser}
+          onClick={() => setIsProfileOpen(true)}
+        >
+          {authUser ? `${authUser.displayName} · Mock` : "Starting…"}
         </button>
       </nav>
       <section className="hero container" id="top">
@@ -118,6 +175,7 @@ export default function App() {
             <button
               className="primary-button"
               type="button"
+              disabled={!authUser}
               onClick={() => setIsGameOpen(true)}
             >
               Play Whack-a-Mole <span>→</span>
@@ -149,9 +207,19 @@ export default function App() {
             Invite friends to MoneyLeap and earn ₹50 for every successful
             referral.
           </p>
-          <button className="secondary-button" type="button">
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={!authUser}
+            onClick={() => setIsProfileOpen(true)}
+          >
             Refer & earn <span>→</span>
           </button>
+          {authError && (
+            <p className="auth-error" role="alert">
+              {authError}
+            </p>
+          )}
         </div>
         <div className="referral-visual">
           <div className="coin coin-one">₹</div>

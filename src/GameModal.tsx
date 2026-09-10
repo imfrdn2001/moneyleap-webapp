@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "./api";
 import { type GameTier, MoleMark } from "./game-ui";
 
 type Match = {
@@ -73,6 +74,8 @@ export function GameModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<Countdown>(3);
   const playSound = useGameSounds();
+  const isAwaitingNextMole = useRef(false);
+  const nextMoleTimer = useRef<number | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -83,6 +86,11 @@ export function GameModal({
       setSelectedTier(null);
       setErrorMessage(null);
       setCountdown(3);
+      isAwaitingNextMole.current = false;
+      if (nextMoleTimer.current !== null) {
+        window.clearTimeout(nextMoleTimer.current);
+        nextMoleTimer.current = null;
+      }
     }
   }, [open]);
 
@@ -119,9 +127,10 @@ export function GameModal({
     setErrorMessage(null);
     setIsLoading(true);
     setSelectedTier(null);
+    isAwaitingNextMole.current = false;
     playSound(360, 0.08, "triangle");
     try {
-      const response = await fetch("/api/matches", {
+      const response = await apiFetch("/api/matches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isPractice, entryAmount: entryAmount ?? null }),
@@ -140,26 +149,37 @@ export function GameModal({
   }
 
   async function whack(hole: number) {
-    if (!match || hole !== activeHole || isLoading) return;
+    if (
+      !match ||
+      hole !== activeHole ||
+      isLoading ||
+      isAwaitingNextMole.current
+    )
+      return;
+
+    isAwaitingNextMole.current = true;
     const nextHits = hits + 1;
     setHits(nextHits);
     playSound(680, 0.06, "square");
     if (nextHits < match.moleCount) {
-      window.setTimeout(
-        () =>
-          setActiveHole(
-            (hole + Math.floor(Math.random() * 8) + 1) % holes.length,
-          ),
-        110,
-      );
+      nextMoleTimer.current = window.setTimeout(() => {
+        setActiveHole(
+          (hole + Math.floor(Math.random() * 8) + 1) % holes.length,
+        );
+        isAwaitingNextMole.current = false;
+        nextMoleTimer.current = null;
+      }, 110);
       return;
     }
     setErrorMessage(null);
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/matches/${match.matchId}/complete`, {
-        method: "POST",
-      });
+      const response = await apiFetch(
+        `/api/matches/${match.matchId}/complete`,
+        {
+          method: "POST",
+        },
+      );
       if (!response.ok) throw new Error("Unable to complete match.");
       const matchResult = (await response.json()) as Result;
       setResult(matchResult);

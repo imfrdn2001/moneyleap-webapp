@@ -46,12 +46,12 @@ flowchart TD
 
 ## Match rules currently configured
 
-| Entry | Moles | Displayed reward |
-| --- | ---: | ---: |
-| ₹10 | 10 | ₹20 |
-| ₹100 | 15 | ₹200 |
-| ₹1,000 | 25 | ₹2,000 |
-| ₹10,000 | 35 | ₹20,000 |
+| Entry   | Moles | Displayed reward |
+| ------- | ----: | ---------------: |
+| ₹10     |    10 |              ₹20 |
+| ₹100    |    15 |             ₹200 |
+| ₹1,000  |    25 |           ₹2,000 |
+| ₹10,000 |    35 |          ₹20,000 |
 
 The backend owns these tiers in `moneyleap-webapp-backend/appsettings.json`. The frontend reads them from the API rather than hard-coding them.
 
@@ -77,6 +77,17 @@ Returns the configured Whack-a-Mole tiers.
   { "entryAmount": 100, "moleCount": 15 }
 ]
 ```
+
+### Mock authentication endpoints
+
+The development app silently creates an in-memory mock session. These endpoints are only for local development and must be replaced with real authentication before production:
+
+- `POST /api/auth/mock-session`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
+
+All match, referral, and wallet endpoints require the resulting bearer token.
+The backend intentionally refuses to start outside the `Development` environment while mock services are configured.
 
 ### `POST /api/matches`
 
@@ -109,6 +120,14 @@ These endpoints intentionally return `501 Not Implemented` until a real payment 
 
 Keeping placeholders makes the intended API boundary explicit without pretending payment is available.
 
+### Mock referral and wallet endpoints
+
+- `GET /api/referrals/me` — referral code, share path, reward history, and mock balance.
+- `POST /api/referrals/claim` — claims a referral code for the current user before their first paid match.
+- `GET /api/wallet` — mock wallet balance and transaction history.
+
+When a referred user completes their first non-practice match, the referrer receives one mock ₹50 ledger entry. All mock data resets when the backend restarts.
+
 ## Current safeguards and limitations
 
 The implementation currently includes:
@@ -122,7 +141,7 @@ The implementation currently includes:
 
 The following are intentional current limitations:
 
-- There is **no authentication** and no trusted user ID yet. The backend currently uses the placeholder player name `Player`.
+- Authentication is an in-memory **mock** session implementation only. It uses a device identifier and opaque token for local development, not a production identity system.
 - Match data and sequence positions are held in memory and disappear when the backend restarts.
 - The client currently reports completion after the UI mole count is cleared. This is not sufficient anti-cheat protection.
 - There is no wallet balance, payment processor, transaction ledger, withdrawal, refund, or settlement system.
@@ -136,7 +155,7 @@ Do not enable paid gameplay until these areas are implemented and independently 
 
 Required changes:
 
-1. Choose an identity solution, such as ASP.NET Core Identity with JWT, Auth0, Firebase Auth, or another OIDC provider.
+1. Replace mock sessions with an identity solution, such as ASP.NET Core Identity with JWT, Auth0, Firebase Auth, or another OIDC provider.
 2. Add sign-up, login, logout, token refresh, password recovery, and account verification flows as appropriate for the chosen provider.
 3. Add an authenticated identity endpoint, for example `GET /api/auth/me`.
 4. Protect match, wallet, payment, and referral endpoints with authorization.
